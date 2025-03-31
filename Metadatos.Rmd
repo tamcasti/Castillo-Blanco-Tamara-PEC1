@@ -1,0 +1,29 @@
+---
+title: "Metadatos PEC1 Análisis de datos ómicos"
+author: "Tamara Castillo Blanco"
+date: "2025-03-31"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Metadatos
+
+Se está trabajando con el dataset "human_cachexia.csv". para cargarlo en R, se emplea read.csv("human_cachexia.csv").
+
+```{r}
+data <- read.csv("human_cachexia.csv")
+head(data)
+dim(data)
+```
+Este repositorio de GitHub contiene el análisis metabolómico comparativo entre pacientes con caquexia y pacientes control.
+
+Es un dataset con:
+  - 77 muestras (47 cachexia, 30 control)
+  - 63 metabolitos cuantificados
+  - Variables: Patient_ID, Muscle_loss (cachexic/control), y concentraciones de metabolitos
