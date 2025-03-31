@@ -1,0 +1,341 @@
+---
+title: "Castillo-Blanco-Tamara-PEC1"
+author: "Tamara Castillo Blanco"
+date: "2025-03-22"
+output:
+  word_document:
+    toc: true               # Habilita la tabla de contenidos
+    toc_depth: 3            # Nivel máximo de títulos (ej. hasta ###)
+    number_sections: true   # Opcional: numeración automática
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## PEC 1
+
+## Tabla de contenidos
+
+## Abstract
+
+La caquexia es un síndrome complejo que se caracteriza por una importante pérdida de masa muscular asociado también a alteraciones metabólicas. Es muy frecuente que se dé en enfermedades crónicas, como el cáncer. [2]
+
+En esta práctica se analizan los datos metabolómicos de pacientes con caquexia vs pacientes control para identificar qué metabolitos están asociados a la pérdida de masa muscular. Los datos se han extraído del dataset human_cachexia.csv, proporcionado en los materiales de al asignatura
+
+Mediante el paquete SummarizedExperiment en R, se estructuran los datos y se realiza un análisis exploratorio. Este incluye un análisis estadístico, pruebas de hipótesis y visualización gráfica.
+
+## Objetivos
+
+El objetivo general del trabajo es identificar metabolitos diferenciales asociados a la caquexia mediante el análisis de datos metabolómico, empleando herramientas bioinformáticas en R.
+
+Para ello, se ha realizado lo siguiente:
+
+- Preparación y estructuración de la información, creando el objeto SummarizedExperiment para un mejor manejo de datos y metadatos.
+
+- Análisis exploratorio, en el que se describen las características generales de los datos y se da una idea de las diferencias entre el grupo caquexia y el grupo control.
+
+- Identificación de metabolitos relevantes, mediante pruebas estadísticas (t-test) y corrección por el método Bonferroni.
+
+- Interpretación biológica, relacionando los metabolitos identificados con rutas metabólicas importantes en la caquexia.
+
+## Metodología
+
+La fuente de datos es el dataset human_cachexia.csv proporiconado en los materiales de la práctica, descargado de GitHub. Contiene 77 muestras, de las cuales 47 son pacientes con caquexia y 30 pertenecen al grupo control. Hay 65 variables, dos de ellas categóricas, Patient_ID y Muscle_loss (caquexia/control) y las 63 restantes son datos metabolómicos de concentraciones (valores numéricos continuos).
+
+Los pasos que se han seguido se detallan a continuación:
+
+1. Pre-procesamiento de datos: se han corregido los nombres de las columnas, así como sustituido los caracteres que R no es capaz de interpretar. También se han convertido ciertos valores a numéricos.
+
+2. Normalización o escalado de los metabolitos, para ser capaces de comparar metabolitos en distintas unidades.
+
+3. Estructuración de datos con SummarizedExperiment de bioconductor. Facilita la integración de datos y metadatos y, en un entorno de trabajo real, nos aporta información compatible con otras herramientas bioinformáticas. Los componentes de SummarizedExperiment son:
+
+  - Assays: matriz de intensidades de los metabolitos.
+  - colData: metadaots de muestras.
+  - rowData: nombres de metabolitos.
+
+4. Análisis exploratorio:
+
+  - Estadística descriptiva (mediante summary). Permite observar medidas de tendencia central e identificar sesgos de distribución para cada metabolito.
+  - Visualicación mediante gráficos de barras y de tipo boxplot.
+  
+5. Análisis estadístico: se aplica t-test como prueba de hipótesis, para comparar las medias entre los grupos. Después, el método Bonferroni de corrección múltiple permite controlar los falsos positivos y, con todo ello, se seleccionan los tres metabolitos más relevantes del estudio, con un umbral de p-valor ajustado de < 0,05 (se han elegido solamente tres con el fin de reducir el informe a la vez que se explica el proceso de trabajo correctamente).
+
+La herramienta utilizada ha sido el lenguaje R, empleando los paquetes clave readr, SummarizedExperiment, ggplot2 y dplyr.
+
+## Resultados
+
+### Creación de SummarizedExperiment
+
+```{r}
+# Cargar la biblioteca necesaria
+library(readr)
+
+# Leer el archivo CSV
+data <- read_csv("human_cachexia.csv", locale = locale(decimal_mark = ","))
+
+# Ver las primeras filas del dataset
+head(data)
+
+# Ver los nombres de las columnas
+colnames(data)
+```
+
+```{r}
+# Corregir nombres de columnas
+colnames(data) <- gsub(",", "_", colnames(data))  # Reemplazar comas por guiones bajos
+colnames(data) <- gsub(" ", "_", colnames(data))  # Reemplazar espacios por guiones bajos
+colnames(data) <- gsub("-", "_", colnames(data))  # Reemplazar los guiones por guiones bajos
+
+# Ver los nombres de las columnas corregidos
+colnames(data)
+```
+```{r}
+# Separar la matriz de datos (intensidades de los metabolitos)
+data_matrix <- as.matrix(data[, 3:ncol(data)])  # Selecciona las columnas numéricas
+
+# Metadatos de las muestras
+col_data <- data[, 1:2]  # Selecciona "Patient ID" y "Muscle loss"
+
+# Metadatos de los metabolitos (nombres de los metabolitos)
+row_data <- data.frame(metabolite = colnames(data)[3:ncol(data)])
+```
+
+```{r}
+# Transponer la matriz de datos
+data_matrix <- t(data_matrix)
+
+# Verificar las nuevas dimensiones
+dim(data_matrix)  # Debería ser 63 filas (metabolitos) x 77 columnas (muestras)
+
+print(paste("Número de filas en data_matrix (metabolitos):", nrow(data_matrix)))
+print(paste("Número de columnas en data_matrix (muestras):", ncol(data_matrix)))
+print(paste("Número de filas en row_data (metabolitos):", nrow(row_data)))
+print(paste("Número de filas en col_data (muestras):", nrow(col_data)))
+```
+
+```{r}
+# Asignar nombres de filas (metabolitos)
+rownames(data_matrix) <- row_data$metabolite
+
+# Asignar nombres de columnas (muestras)
+colnames(data_matrix) <- col_data$Patient_ID
+```
+
+```{r}
+# Instalar y cargar SummarizedExperiment
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("SummarizedExperiment")
+library(SummarizedExperiment)
+
+# Crear el objeto SummarizedExperiment
+se <- SummarizedExperiment(assays = list(counts = data_matrix),
+                           colData = col_data,
+                           rowData = row_data)
+
+# Ver el objeto
+se
+
+# Guardar en formato binario
+save(se, file = "summarizedepxerimenta.Rda", compress = TRUE)
+```
+
+### Análisis exploratorio
+
+```{r}
+# Resumen estadístico de las variables
+summary(data)
+```
+
+Resumen:
+
+- El dataset contiene una gran variabilidad en las concentraciones de los metabolitos, muchos de ellos con distribuciones sesgadas y rangos muy amplios.
+
+- Las distribuciones de muchas variables están sesgadas, lo que sugiere que la media no es buen representante de la tendencia.
+
+Este resumen estadístico es un punto de partida para comenzar un análisis más detallado.
+
+```{r}
+# Frecuencia de la variable categórica
+table(data$Muscle_loss)
+
+# Gráfico de barras para la variable categórica
+barplot(table(data$Muscle_loss), main = "Distribución de Muscle loss", xlab = "Categoría", ylab = "Frecuencia")
+```
+
+```{r}
+# Cargar librerías necesarias
+library(dplyr)
+library(ggplot2)
+
+# Excluir columnas no numéricas (Patient_ID y Muscle_loss)
+numeric_data <- data[, -c(1, 2)]
+
+# Verificar que solo quedan columnas numéricas
+str(numeric_data)
+
+# Algunas columnas están en formato chr. 
+problem_columns <- c("3_Hydroxyisovalerate", "Fumarate", "N_N_Dimethylglycine", "Pyruvate")
+
+# Limpiar valores no numéricos
+for (col in problem_columns) {
+  numeric_data[[col]] <- gsub(",", "", numeric_data[[col]])  # Eliminar comas
+  numeric_data[[col]] <- gsub(" ", "", numeric_data[[col]])  # Eliminar espacios
+  numeric_data[[col]] <- gsub("[^0-9.]", "", numeric_data[[col]])  # Eliminar todo excepto números y puntos
+}
+
+# Convertir las columnas a numéricas
+for (col in problem_columns) {
+  numeric_data[[col]] <- as.numeric(numeric_data[[col]])
+}
+
+# Escalar los datos (normalización)
+scaled_data <- scale(numeric_data)
+```
+
+```{r}
+# Dividir los datos en dos grupos: cachexic y control
+cachexic_data <- scaled_data[data$Muscle_loss == "cachexic", ]
+control_data <- scaled_data[data$Muscle_loss == "control", ]
+
+# Comparar las medias de cada metabolito entre grupos
+mean_diff <- colMeans(cachexic_data) - colMeans(control_data)
+
+# Ver los metabolitos con mayores diferencias
+sort(abs(mean_diff), decreasing = TRUE)
+```
+
+Estos valores representan la diferencia absoluta de entre las medias de cada metabolito para el grupo cachexic el grupo control. A mayor diferencia, mayor relevancia podría tener el metabolito para distinguir entre los dos grupos.
+
+Los metabolitos con más diferencia son el N-N-dimethylglicine, Glutamine y Formate.
+
+
+```{r}
+# Análisis estadistico
+
+# Función para aplicar t-test a cada metabolito
+perform_t_test <- function(metabolite) {
+  t.test(metabolite ~ data$Muscle_loss)
+}
+
+# Aplicar t-test a todos los metabolitos
+t_test_results <- apply(numeric_data, 2, perform_t_test)
+
+# Extraer p-valores
+p_values <- sapply(t_test_results, function(x) x$p.value)
+
+# Ajustar p-valores para múltiples comparaciones (corrección de Bonferroni)
+adjusted_p_values <- p.adjust(p_values, method = "bonferroni")
+
+# Crear un dataframe con los resultados
+results <- data.frame(
+  Metabolite = colnames(numeric_data),
+  Mean_Difference = mean_diff,
+  P_Value = p_values,
+  Adjusted_P_Value = adjusted_p_values
+)
+
+# Ordenar por p-valor ajustado
+results <- results[order(results$Adjusted_P_Value), ]
+
+# Ver los resultados
+print(results)
+```
+
+```{r}
+library(ggplot2)
+
+# Seleccionar los 3 metabolitos más significativos
+top_metabolites <- results$Metabolite[1:3]
+
+# Crear un gráfico de cajas (boxplot) para cada metabolito significativo
+library(ggplot2)
+for (metabolite in top_metabolites) {
+  print(
+    ggplot(data, aes(x = Muscle_loss, y = .data[[metabolite]], fill = Muscle_loss)) +
+      geom_boxplot() +
+      labs(title = paste("Distribución de", metabolite),
+           x = "Grupo",
+           y = "Concentración") +
+      theme_minimal()
+  )
+}
+```
+
+```{r}
+# Dada la diferencia de valores en N_N-Dymethilglycine se procede a una transformación logaritmica
+# Convertir a numérico
+data$N_N_Dimethylglycine <- as.numeric(data$N_N_Dimethylglycine)
+
+# Transformación logarítmica
+data$N_N_Dimethylglycine_log <- log(data$N_N_Dimethylglycine + 1)  # +1 para evitar log(0)
+
+# Gráfico de cajas
+ggplot(data, aes(x = Muscle_loss, y = N_N_Dimethylglycine_log, fill = Muscle_loss)) +
+  geom_boxplot() +
+  labs(title = "Distribución de N_N-Dimethylglycine (log)",
+       x = "Grupo",
+       y = "Concentración (log)") +
+  theme_minimal()
+```
+
+## Discusión
+
+El análisis realizado identifica tres metabolitos sustantivamente diferenciales entre pacientes con caquexia y pacientes del grupo control: N-N-Dimetilglicina, Glutamina o Formato.
+
+- La N-N-dimetilgicina es la parte activa de la vitamina B15 y forma parte del metabolismo energético. Participa en ciertas reacciones enzimáticas implicadas en rutas de síntesis de vitaminas, hormonas, neurotransmisores y otras biomoléculas del organismo. Este metabolito actúa como "intensificador metabólico", ayudando a mejorar funciones fisiológicas a nivel del sistema inmune, cardiovascular y función muscular. [1]
+
+- La glutamina es un aminoácido que en personas sanas es no esencial, pero en situaciones de estrés, como el caso que se estudia, pasa a ser esencial. Es el aminoácido más abundante en el organismo, tanto en el plasma como en los tejidos, especialmente a nivel muscular. Además, participa en el sistema inmune y ejerce funciones como preservador del glutation y otras moléculas antioxidantes. Como se comentaba previamente, el músculo esquelético alberga un gran depósito de glutamina, lo cual es coherente con que sea un metabolito a estudiar enpacientes con caquexia. [3] [4]
+
+- El formato (o formiato) es un metabolito intermedio del metabolismo del ácido fórmico, el ácido carbónico más sencillo ya que solo tiene un carbono. Se trata de un compuesto esencial, pues participa en la síntesis de purinas y en la metilación. Es producido por dos vías, a nivel mitocondrial y a nivel intestinal, en rutas dependientes del folato y la vitamina B12. Sin embargo, su acumulación excesiva puede llegar a ser perjudicial, pues genera estrés oxidativo por radicales libres. Su acumulación puede conllevar alteraciones mitocondriales y a déficit de vitamina B12 y folato, en enfermedades como el cáncer. Así, se observa su relación con la caquexia, lo cual ocupa este trabajo. [5]
+
+Por otro lado, se deben discutir las diferencias entre SummarizedExperiment, el objeto empleado en el análisis de la práctica, versus ExpressionSet.[6] [7]
+
+- SummarizedExperiment (SE) maneja múltiples datos y matrices (assays), mientras que ExpressionSet (ES) está más orientado a datos de expresión génica con una sola matriz de expresión.
+
+- También hay diferencias en la estructura, el almacenamiento de metadatos de muestras,  características y experimentales. En SE emplea colData, rowDara y metadata, respectivamente, y en ES empleamos phenoData, featureData y experimentData.
+
+- SE es más moderno y compatible con herramientas actuales de Bioconductor.
+
+- ES está siendo reemplazado por SE porque se emplea en muchas aplicaciones y bases de datos modernas, como metabolomicsWorkbench. Está siendo reerente para el manejo de datos de alto rendimiento.
+
+Sin embargo, el estudio presenta importantes limitaciones, que se exponen a continuación.
+
+- Los resultados se han obtenido empleando estadística fiable pero, dada la extensión reducida del trabajo, es posible que ciertos metabolitos se hayan quedado fuera del estudio, pues se ha escogido profundizar en los tres primeros por simplificación.
+
+- El tamaño de la muestra es reducido (77 pacientes), lo cual podría limitar también la generalización de los resultados. 
+
+- Algunos metabolitos presentan distribuciones sesgadas, concretamente N-N-dimetilglicina, por lo que se ha optado por una transformación logarítmica para un mejor análisis.
+
+- El empleo de la corrección de Bonferroni puede descartar falsos negativos, pues aunque es un método riguroso, puede resultar conservador.
+
+## Conclusiones
+
+- Los metabolitos identificados están vinculados a rutas metabólicas importantes en la caquexia, tales como el estrés oxidativo, la degradación muscular y la síntesis de proteínas. Esto respalda el hecho de que la caquexia produce alteraciones importantes a nivel sistémico, en el metabolismo energético y proteico.
+
+- Estos metabolitos podrían emplearse como biomarcadores potenciales en el diagnóstico en fases iniciales de la caquexia, así como en monitorización de pacientes con cáncer u otras enfermedades crónicas.
+
+- Las limitaciones previamente explicadas hacen necesario un estudio más exhaustivo, con cohortes más grandes y que integren datos de otras ómicas para una mejor comprensión del síndrome.
+
+
+## Referencias
+
+[1] Kendall, R. (1995). La dimetilglicina (DMG), un normalizador fisiológico con acción inmunoestimulante. Natura Medicatrix: Revista médica para el estudio y difusión de las medicinas alternativas, (41), 28-30.
+
+[2] Gómez, R., & Fernández, M. (2017). Suplementos nutricionales como modificadores de morbimortalidad en pacientes con cáncer. Archivos Venezolanos de Farmacología y Terapéutica, 36(4), 169-180. https://ve.scielo.org/scielo.php?script=sci_arttext&pid=S0004-06222017000400169
+
+[3] Castejón, E., Lambruschini, N., Meavilla, S. M. y Catalán, N. (2010). Manejo farmacológico en el síndrome anorexia-caquexia. Sección de Gastroenterología, Hepatología y Nutrición Infantil, Hospital Sant Joan de Déu, Esplugues de Llobregat, Barcelona, España 
+
+[4] López Pérez, A., Perales Pascual, J., Escolano Pueyo, Á., López Pérez, M., & Serrano Vicente, C. (2022). Revisión narrativa del papel de la glutamina en la prevención y el tratamiento de diferentes patologías. Revista de Nutrición Clínica y Metabolismo, 5(4), 51-64. https://doi.org/10.35454/rncm.v5n4.434
+
+[5] Pietzke, M., Meiser, J., & Vazquez, A. (2020). Formate metabolism in health and disease. Molecular Metabolism, 33, 23-37. https://doi.org/10.1016/j.molmet.2019.05.012
+
+[6] Morgan, M., Obenchain, V., Hester, J., & Pagès, H. (2023). SummarizedExperiment: SummarizedExperiment container [Software]. Bioconductor. https://bioconductor.org/packages/release/bioc/html/SummarizedExperiment.html
+
+[7] Gentleman, R., Carey, V., Huber, W., Irizarry, R., & Dudoit, S. (2023). Biobase: ExpressionSet class [Software]. RDocumentation. https://www.rdocumentation.org/packages/Biobase/versions/2.32.0/topics/ExpressionSet
+
+[8] Repositorio github: https://github.com/tamcasti/Castillo-Blanco-Tamara-PEC1
+
+## Anexos
